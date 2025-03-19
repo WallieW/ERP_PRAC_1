@@ -7,7 +7,7 @@ import random
 # variables to change during demo time
 sampling_period = 60
 simulation_time = 3000
-initial_object_location = [1,1]    # in kilometers
+initial_object_location = [10,10]    # in kilometers
 initial_object_velocity = [0.02,0]    # in meters/s  (needs to be in decimal values (other wise it is km/s)
 process_noise_std = 0.01        # in meters/s^2
 
@@ -202,7 +202,7 @@ def generate_polar_measurements(x, y, range_noise_std=0.1, bearing_noise_std=0.0
 # Initial state [x, y, vx, vy, ax, ay]
 x0 = [initial_object_location[0]*1000, initial_object_location[1]*1000, initial_object_velocity[0], initial_object_velocity[1], np.random.normal(0,process_noise_std), np.random.normal(0,process_noise_std)]
 # x0 = [0, 0, random.uniform(0, 10), random.uniform(0, 10), random.uniform(-0.2, 0.2), random.uniform(-0.2, 0.2)]
-dt = 1 # Time step
+dt = 0.1 # Time step
 steps = 3000  # Number of steps
 
 
@@ -216,21 +216,19 @@ model_y_velocity = trajectory[:,3]
 model_x_acc = trajectory[:,4]
 model_y_acc = trajectory[:,5]
 
-cartesian_plot_1 = [model_x_coordinate, model_y_coordinate]
-cartesian_plot_2 = [model_x_velocity, model_y_velocity]
-cartesian_plot_3 = [model_x_acc, model_y_acc]
+# cartesian_plot_1 = [model_x_coordinate, model_y_coordinate]
+# cartesian_plot_2 = [model_x_velocity, model_y_velocity]
+# cartesian_plot_3 = [model_x_acc, model_y_acc]
 
 
 # polar conversions
 model_polar_range, model_polar_bearing = convert_to_polar(model_x_coordinate , model_y_coordinate)
-
 polar_range_noise_sensor, polar_bearing_noise_sensor = generate_sensor_noise(model_polar_range.size)
-
 polar_range_noisy = model_polar_range + polar_range_noise_sensor                # polar range measurements to send to the stm32f
 polar_bearing_noisy = (model_polar_bearing + polar_bearing_noise_sensor)%360    # polar bearing measurements to send to the stm32f
 
-polar_plot_1 = [model_polar_range, model_polar_bearing]
-polar_plot_2 = [polar_range_noisy, polar_bearing_noisy]
+# polar_plot_1 = [model_polar_range, model_polar_bearing]
+# polar_plot_2 = [polar_range_noisy, polar_bearing_noisy]
 
 # python polar to cartesian conversion and plotting of the error:
 noisy_cartesian_x , noisy_cartesian_y  = polar_to_cartesian(polar_range_noisy, polar_bearing_noisy)
@@ -238,12 +236,41 @@ cartesian_plot_3 = [noisy_cartesian_x, noisy_cartesian_y]
 
 
 # gather the sample data
-samples = []
+cartesian_normal_samples = []
+cartesian_embedded_samples = []
+cartesian_python_converted_samples = []
+
+polar_non_noisy_samples = []
+polar_noisy_samples = []
+
 for i in range(0,steps, sampling_period):
-    samples.append([float(polar_range_noisy[i]),float(polar_bearing_noisy[i])])
+    cartesian_normal_samples.append([float(model_x_coordinate[i]),float(model_y_coordinate[i])])
+    cartesian_python_converted_samples.append([float(noisy_cartesian_x[i]) , float(noisy_cartesian_y[i])])
+    polar_non_noisy_samples.append([float(model_polar_range[i]) , float(model_polar_bearing[i])])
+    polar_noisy_samples.append([float(polar_range_noisy[i]) , float(polar_bearing_noisy[i])])
 
-generate_cartesian_plots(cartesian_plot_1, cartesian_plot_2, cartesian_plot_3)
-generate_polar_plots(polar_plot_1, polar_plot_2)
+
+cartesian_sample_normal_x = [i[0] for i in cartesian_normal_samples]
+cartesian_sample_normal_y = [i[1] for i in cartesian_normal_samples]
+
+cartesian_python_converted_x = [i[0] for i in cartesian_python_converted_samples]
+cartesian_python_converted_y = [i[1] for i in cartesian_python_converted_samples]
+
+polar_non_noisy_x = [i[0] for i in polar_non_noisy_samples]
+polar_non_noisy_y = [i[1] for i in polar_non_noisy_samples]
+
+polar_noisy_x = [i[0] for i in polar_noisy_samples]
+polar_noisy_y = [i[1] for i in polar_noisy_samples]
 
 
-print(samples)
+
+generate_cartesian_plots(np.array([cartesian_sample_normal_x , cartesian_sample_normal_y]),
+                         np.array([0,0]),
+                         np.array([cartesian_python_converted_x,cartesian_python_converted_y]))
+
+generate_polar_plots(np.array([polar_non_noisy_x,polar_non_noisy_y]),
+                     np.array([polar_noisy_x,polar_noisy_y]))
+
+# send the sampled data to the stm32 through the com port
+
+
