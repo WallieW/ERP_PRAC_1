@@ -4,16 +4,19 @@ import serial
 import math
 import random
 from scipy.stats import norm,kstest
+from scipy.stats import shapiro
+
+np.random.seed(23)
 
 # variables to change during demo time
 sampling_period = 60
 simulation_time = 3000
 initial_object_location = [10,10]   # in kilometers
-initial_object_velocity = [25,25]    # in meters/s  (needs to be in decimal values (other wise it is km/s)
+initial_object_velocity = [20,0]    # in meters/s  (needs to be in decimal values (other wise it is km/s)
 process_noise_std = 0.01        # in meters/s^2
 
 # sensor noise parameters
-range_error_std = 20            # in meters
+range_error_std = 20        # in meters
 range_error_mean = 0            # in meters
 
 bearing_error_std = 1           # in degrees
@@ -72,6 +75,21 @@ def generate_sensor_noise(size):
 
     return sensor_range_noise,sensor_bearing_noise
 
+def generate_polar_plots(polar_model, polar_model_noisy):
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 6))
+    fig.suptitle("Polar Plot for Model and Noisy Sensor")
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    ax.plot(np.deg2rad(polar_model[1]), polar_model[0] / 1000, "-", color="darkblue", label="Model")
+    ax.plot(np.deg2rad(polar_model_noisy[1]), polar_model_noisy[0] / 1000, "-*", alpha=0.4, color="green", label="Noisy Sensor")
+    ax.grid(True)
+    ax.legend()
+    ax.set_ylabel("Range (km)", labelpad=40)
+    ax.text(0.5, -0.1, "Angle (degrees)", transform=ax.transAxes, ha="center", va="center")
+    ax.tick_params(axis='both', labelsize=14)
+    plt.show()
+
+
 #polar to cartesian plots
 def polar_to_cartesian(polar_range, polar_bearing):
     cartesian_x = polar_range*np.cos(np.deg2rad(polar_bearing))
@@ -91,7 +109,13 @@ def generate_cartesian_plots(cartesian_model, cartesian_embedded, cartesian_velo
     ax1.set_title("Target positional distance from origin ")
 
     time = np.linspace(0, simulation_time , int(simulation_time / sampling_period))
+    print("this is the time: ", time)
     model_velocity = np.sqrt(cartesian_velocity[0]**2 + cartesian_velocity[1]**2)
+    print("this is the embedded velocity: ", embedded_velocity)
+
+    print(time[1:])
+    print(embedded_velocity[1:])
+    print(model_velocity[1:])
 
     ax2.plot( time[1:], model_velocity[1:] , "-*", color="red", label="Target model velocity (simulated)")
     ax2.plot(time[1:], embedded_velocity[1:], "-o", color="lightgreen", alpha=0.8, label="Embedded system target velocity")
@@ -107,18 +131,7 @@ def generate_cartesian_plots(cartesian_model, cartesian_embedded, cartesian_velo
     plt.show()
 
 # plot the polar co-ordinates of the model
-def generate_polar_plots(polar_model, polar_model_noisy):
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 6))
-    fig.suptitle("Polar Plot for Model and Noisy Sensor")
-    ax.set_theta_zero_location("N")
-    ax.set_theta_direction(-1)
-    ax.plot(np.deg2rad(polar_model[1]), polar_model[0] / 1000, "-", color="darkblue", label="Model")
-    ax.plot(np.deg2rad(polar_model_noisy[1]), polar_model_noisy[0] / 1000, "-*", alpha=0.7, color="lightgreen", label="Noisy Sensor")
-    ax.grid(True)
-    ax.legend()
-    ax.set_ylabel("Range (km)", labelpad=20)
-    ax.text(0.5, -0.1, "Angle (degrees)", transform=ax.transAxes, ha="center", va="center")
-    plt.show()
+
 
 
 #model of the object that will be tracked
@@ -142,7 +155,6 @@ def polynomial_model(x0, dt, steps, position_noise_std=0.01, velocity_noise_std=
         ax = 0#x0[4]
         ay = 0#x0[5]
 
-        #hi
         # Add noise to each state
         x += process_noise[i, 0]
         y += process_noise[i, 1]
@@ -192,7 +204,7 @@ def generate_polar_measurements(x, y, range_noise_std=0.1, bearing_noise_std=0.0
 
 #sets the initial state
 # Initial state [x, y, vx, vy, ax, ay]
-x0 = [initial_object_location[0]*1000, initial_object_location[1]*1000, initial_object_velocity[0], initial_object_velocity[1], np.random.normal(0,process_noise_std), np.random.normal(0,process_noise_std)]
+x0 = [initial_object_location[0]*1000, initial_object_location[1]*1000, initial_object_velocity[0], initial_object_velocity[1], np.random.normal(0,0.0001), np.random.normal(0,0.0001)]
 dt = 1 # Time step
 steps = simulation_time  # Number of steps
 
@@ -302,8 +314,8 @@ def verify_target_model():
     cartesian_deterministic_x = trajectory[:,0]
     cartesian_deterministic_y = trajectory[:,1]
 
-    cartesian_deterministic_x_sampled = [initial_object_location[0]*1000]
-    cartesian_deterministic_y_sampled = [initial_object_location[1]*1000]
+    cartesian_deterministic_x_sampled = []#[initial_object_location[0]*1000]
+    cartesian_deterministic_y_sampled = []#[initial_object_location[1]*1000]
 
     for i in range (0, int(simulation_time/sampling_period)):
         new_x_position = x_position[i] + initial_object_velocity[0]*sampling_period
@@ -311,8 +323,8 @@ def verify_target_model():
         new_y_position = y_position[i] + initial_object_velocity[1]*sampling_period
         y_position.append(new_y_position)
 
-        cartesian_deterministic_x_sampled.append(cartesian_deterministic_x[i*sampling_period])
-        cartesian_deterministic_y_sampled.append(cartesian_deterministic_y[i*sampling_period])
+        cartesian_deterministic_x_sampled.append(cartesian_deterministic_x[i*sampling_period]-initial_object_velocity[0])
+        cartesian_deterministic_y_sampled.append(cartesian_deterministic_y[i*sampling_period]-initial_object_velocity[1])
 
     cartesian_deterministic_x_sampled.append(cartesian_deterministic_x[-1])
     cartesian_deterministic_y_sampled.append(cartesian_deterministic_y[-1])
@@ -323,6 +335,9 @@ def verify_target_model():
     plt.title("Target trajectory position comparison (deterministic(polynomial) vs movement equations)")
     plt.xlabel("X Position from origin (km)")
     plt.ylabel("Y Position from origin (km)")
+
+    print("model x: ", cartesian_deterministic_x_sampled, " model y: ", cartesian_deterministic_y_sampled)
+    print("move x: ", x_position , " move y: ", y_position)
     plt.grid(True)
     plt.show()
 
@@ -330,8 +345,8 @@ def verify_target_model():
 
 def verfiy_noise_distrubtion(noise_range, noise_bearing):
     #uncomment if more samples required to show better normal dist
-    # noise_samples = 10000
-    # noise_range, noise_bearing = generate_sensor_noise(noise_samples)
+    #noise_samples = 10000
+    #noise_range, noise_bearing = generate_sensor_noise(noise_samples)
 
     fig, (ax1, ax2) = plt.subplots(1,2 , figsize = (10,6))
 
@@ -376,9 +391,16 @@ def verfiy_noise_distrubtion(noise_range, noise_bearing):
 
     ax1.grid(True)
     ax2.grid(True)
+
+    stat_range, p_value_range = shapiro(noise_range)
+    stat_bearing, p_value_bearing = shapiro(noise_bearing)
+
+    print("P value for the range: ", p_value_range)
+    print("P value for the bearing: ", p_value_bearing)
+
     plt.show()
 
-def non_linearity_of_conversion(number_of_samples = 15000,range_mean = 5,range_standard_deviation = 2 ,theta_mean = 0,theta_standard_deviation = 0.3  ):
+def non_linearity_of_conversion(number_of_samples = 15000,range_mean = 100,range_standard_deviation = 5 ,theta_mean = 0,theta_standard_deviation = 0.3  ):
 # # Step 1: Generate polar measurements (range, bearing) from a Gaussian distribution
 # number_of_samples = 15000
 
@@ -429,11 +451,11 @@ def non_linearity_of_conversion(number_of_samples = 15000,range_mean = 5,range_s
     plt.show()
 
 def calculate_stats(non_det_x, non_det_y, det_x, det_y, move_x, move_y, embedded_v, model_v, embedded_x, embedded_y):
-    error_non_det_x = non_det_x - det_x[:-2]
-    error_non_det_y = non_det_y - det_y[:-2]
+    error_non_det_x = non_det_x - det_x[:-1]
+    error_non_det_y = non_det_y - det_y[:-1]
 
-    error_move_x = move_x - det_x[:-1]
-    error_move_y = move_y - det_y[:-1]
+    error_move_x = move_x - det_x
+    error_move_y = move_y - det_y
 
     error_non_det_move_x = non_det_x - move_x[:-1]
     error_non_det_move_y = non_det_y - move_y[:-1]
